@@ -5,7 +5,7 @@ from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     filters, ContextTypes, ConversationHandler
 )
-from config import BOT_TOKEN, CHILD_NAME
+from config import BOT_TOKEN, CHILD_NAME, CHILD_AGE
 from notion_db import (
     add_transaction, get_balance, get_transactions,
     add_goal, get_goals, update_goal_saved
@@ -320,7 +320,7 @@ async def get_ai_advice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     balance = get_balance(CHILD_NAME)
     transactions = get_transactions(CHILD_NAME)
     goals = get_goals(CHILD_NAME)
-    advice = get_financial_advice(CHILD_NAME, balance, transactions, goals)
+    advice = get_financial_advice(CHILD_NAME, balance, transactions, goals, child_age=CHILD_AGE)
     await update.message.reply_text(
         f"🤖 *Совет от AI-советника:*\n\n{advice}",
         parse_mode="Markdown",
@@ -336,7 +336,7 @@ async def handle_free_text_question(update: Update, context: ContextTypes.DEFAUL
         balance = get_balance(CHILD_NAME)
         transactions = get_transactions(CHILD_NAME, limit=5)
         goals = get_goals(CHILD_NAME)
-        response = chat_with_advisor(CHILD_NAME, question, balance, transactions, goals)
+        response = chat_with_advisor(CHILD_NAME, question, balance, transactions, goals, child_age=CHILD_AGE)
         await update.message.reply_text(
             f"🤖 {response}",
             reply_markup=main_keyboard()
