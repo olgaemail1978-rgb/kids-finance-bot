@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 # Conversation states
 CHOOSING_ACTION = 0
 ADDING_INCOME_AMOUNT = 1
-ADDING_INCOME_DESC = 2
+ADDING_INCOME_SOURCE = 2   # откуда деньги (тип)
+ADDING_INCOME_FROM = 10    # от кого / основание
 ADDING_EXPENSE_AMOUNT = 3
 ADDING_EXPENSE_CATEGORY = 4
 ADDING_EXPENSE_DESC = 5
@@ -79,9 +80,11 @@ async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return CHOOSING_ACTION
 
+INCOME_SOURCES = ["Карманные деньги", "Наличные", "Подарок", "Перевод на карту", "Другое"]
+
 async def start_add_income(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "💵 Сколько денег ты получил? Введи сумму (например: 100):",
+        "💵 Сколько денег ты получил(а)? Введи сумму (например: 20):",
         reply_markup=ReplyKeyboardMarkup([[KeyboardButton("Отмена")]], resize_keyboard=True)
     )
     return ADDING_INCOME_AMOUNT
@@ -94,31 +97,47 @@ async def add_income_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         amount = float(update.message.text.replace(",", "."))
         context.user_data["income_amount"] = amount
         await update.message.reply_text(
-            "📝 Откуда эти деньги? Напиши описание (например: карманные деньги, подарок):",
-            reply_markup=ReplyKeyboardMarkup([[KeyboardButton("Карманные деньги"), KeyboardButton("Подарок")],
-                                              [KeyboardButton("Отмена")]], resize_keyboard=True)
+            "📥 Как пришли деньги? Выбери вариант или напиши сам:",
+            reply_markup=ReplyKeyboardMarkup([
+                [KeyboardButton("Карманные деньги"), KeyboardButton("Наличные")],
+                [KeyboardButton("Подарок"), KeyboardButton("Перевод на карту")],
+                [KeyboardButton("Другое"), KeyboardButton("Отмена")]
+            ], resize_keyboard=True)
         )
-        return ADDING_INCOME_DESC
+        return ADDING_INCOME_SOURCE
     except ValueError:
         await update.message.reply_text("❌ Это не похоже на число. Попробуй ещё раз:")
         return ADDING_INCOME_AMOUNT
 
-async def add_income_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def add_income_source(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text == "Отмена":
+        await update.message.reply_text("Отменено.", reply_markup=main_keyboard())
+        return CHOOSING_ACTION
+    context.user_data["income_source"] = update.message.text
+    await update.message.reply_text(
+        "👤 От кого получил(а) или за что? Напиши (например: от мамы, за помощь по дому, от бабушки на день рождения):",
+        reply_markup=ReplyKeyboardMarkup([[KeyboardButton("Отмена")]], resize_keyboard=True)
+    )
+    return ADDING_INCOME_FROM
+
+async def add_income_from(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text == "Отмена":
         await update.message.reply_text("Отменено.", reply_markup=main_keyboard())
         return CHOOSING_ACTION
     amount = context.user_data.get("income_amount", 0)
-    description = update.message.text
+    source = context.user_data.get("income_source", "Доход")
+    from_who = update.message.text
+    description = f"{source} — {from_who}"
     success, error_msg = add_transaction(amount, "Доход", description, CHILD_NAME)
     if success:
         balance = get_balance(CHILD_NAME)
         await update.message.reply_text(
-            f"✅ Записано! +{amount:.0f} руб. — {description}\n💰 Новый баланс: *{balance:.2f} руб.*",
+            f"✅ Записано! +{amount:.0f} € — {description}\n💰 Новый баланс: *{balance:.2f} €*",
             parse_mode="Markdown",
             reply_markup=main_keyboard()
         )
     else:
-        logger.error(f"add_income_desc failed: {error_msg}")
+        logger.error(f"add_income_from failed: {error_msg}")
         await update.message.reply_text(
             f"❌ Ошибка при сохранении: {error_msg}\nПопробуй ещё раз.",
             reply_markup=main_keyboard()
@@ -373,7 +392,8 @@ def main():
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_free_text_question),
             ],
             ADDING_INCOME_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_income_amount)],
-            ADDING_INCOME_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_income_desc)],
+            ADDING_INCOME_SOURCE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_income_source)],
+            ADDING_INCOME_FROM: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_income_from)],
             ADDING_EXPENSE_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_expense_amount)],
             ADDING_EXPENSE_CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_expense_category)],
             ADDING_EXPENSE_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_expense_desc)],
